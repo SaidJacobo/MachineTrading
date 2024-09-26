@@ -1,4 +1,7 @@
 import pandas as pd
+from sklearn.discriminant_analysis import StandardScaler
+from sklearn.ensemble import StackingClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
@@ -6,6 +9,8 @@ from sklearn.compose import ColumnTransformer
 from sklearn.metrics import fbeta_score, make_scorer, auc, roc_curve
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import RobustScaler
+
+from probability_transformer import ProbabilityTransformer
 
 class MachineLearningAgent():
   """Agente de Aprendizaje Automático para entrenar y predecir."""
@@ -30,6 +35,7 @@ class MachineLearningAgent():
       self.stock_true_values[ticker] = {}
     
     self.train_results = {}
+    self.best_params = {}
 
   def predict(self, x):
     """Realiza predicciones.
@@ -81,10 +87,22 @@ class MachineLearningAgent():
           ],
           remainder='passthrough'  # Las demás columnas se mantienen sin cambios
       )
+      log_reg = LogisticRegression(
+        multi_class='auto', 
+        solver='lbfgs', 
+        class_weight='balanced', 
+        max_iter=1000,
+        random_state=42
+      )
 
       pipe = Pipeline([
-          ('scaler', scaler),
-          ('model', self.model)
+          ('scaler', StandardScaler()),  # Normalizar características
+          ('stacking', StackingClassifier(
+              estimators=[
+                  ('prob_transf', ProbabilityTransformer(self.model)),
+              ],
+              final_estimator=log_reg
+          ))
       ])
 
       n_splits = 3
@@ -108,6 +126,7 @@ class MachineLearningAgent():
 
       # Obtengo el best estimator
       self.pipeline = search.best_estimator_
+      self.best_params = search.best_params_
 
       self.tunning = False
 
@@ -117,21 +136,21 @@ class MachineLearningAgent():
       
       try:
         self.pipeline.fit(x_train, y_train)
+        x_train['preds'] = self.pipeline.predict(x_train)
+        x_train['target'] = y_train
 
-      except:
-        print('Entrenamiento cancelado')
+        fpr, tpr, _ = roc_curve(x_train['preds'], x_train['target'])
+        auc_score = auc(fpr, tpr)
+        
+        self.train_results[date_train] = auc_score
+
+        if verbose:
+          print('train auc: ', auc_score)
+
+      except Exception as e:
+        print(f'Entrenamiento cancelado: {e}')
       
     
-    x_train['preds'] = self.pipeline.predict(x_train)
-    x_train['target'] = y_train
-
-    fpr, tpr, _ = roc_curve(x_train['preds'], x_train['target'])
-    auc_score = auc(fpr, tpr)
-    
-    self.train_results[date_train] = auc_score
-
-    if verbose:
-      print('train auc: ', auc_score)
 
 
   def save_predictions(self, date, ticker, y_true, y_pred):

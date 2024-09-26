@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import pandas as pd
 import yaml
 import os
@@ -44,15 +45,19 @@ if __name__ == '__main__':
     # Obtención de parámetros del proyecto
     period = config['period']
     mode = config['mode']
+    date_from = datetime.strptime(config['date_from'], '%Y-%m-%d')
+    date_to = datetime.strptime(config['date_to'], '%Y-%m-%d')
     limit_date_train = config['limit_date_train']
     tickers = config["tickers"] 
-    days_back = config['days_back_target']
+    days_forward = config['days_forward_target']
     
     # Obtención de parámetros de entrenamiento
     models = parameters['models']
     train_window = parameters['train_window']
     train_period = parameters['train_period']
     trading_strategies = parameters['trading_strategy']
+
+    max_window = max(train_window)
 
     # Combinaciones de parámetros
     parameter_combinations = get_parameter_combinations(models, train_window, train_period, trading_strategies)
@@ -62,10 +67,12 @@ if __name__ == '__main__':
         
         # Definición de la ruta de resultados
         results_path = f'mode_{mode}-model_{model_name}-trainwindow_{train_window}-trainperiod_{train_period}-tradingstrategy_{trading_strategies}'
+        print(f'Se ejecutara la configuracion {results_path}')
+
         path = os.path.join('data', results_path)
         
         if os.path.exists(path):
-            print(f'El entrenamiento con la configuracion: {results_path} ya fue realizado. Se procederá al siguiente.')
+            print(f'El entrenamiento ya fue realizado. Se procederá al siguiente.')
             continue
 
         # Carga del agente de estrategia de trading
@@ -75,7 +82,7 @@ if __name__ == '__main__':
             trading_strategy=strategy,
             threshold_up=config['threshold_up'],
             threshold_down=config['threshold_down'],
-            allowed_days_in_position=config['days_back_target']
+            allowed_days_in_position=days_forward
         )
 
         # Configuración del modelo de machine learning
@@ -97,20 +104,22 @@ if __name__ == '__main__':
 
         if not os.path.exists('./data/dataset.csv'):
             back_tester.create_dataset(
+                date_from=date_from - timedelta(days=max_window + 300),
+                date_to=date_to,
                 data_path='./data', 
-                days_back=days_back, 
+                days_back=days_forward, 
                 period=period,
-                # limit_date_train=limit_date_train
             )
 
-        # data_path = './data/train.csv' if mode == 'train' else './data/test.csv'
         data_path = './data/dataset.csv'
 
         back_tester.start(
+            start_date=date_from,
             data_path=data_path,
             train_window=train_window, 
             train_period=train_period,
             mode=mode,
             limit_date_train=limit_date_train,
-            results_path=results_path
+            results_path=results_path,
+            period_forward_target=days_forward
         )

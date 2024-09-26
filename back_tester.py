@@ -1,5 +1,5 @@
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 import pandas as pd
 import yfinance as yf
 from machine_learning_agent import MachineLearningAgent
@@ -22,7 +22,7 @@ class BackTester():
     self.tickers = tickers
     self.stocks = {}
 
-  def create_dataset(self, data_path:str, days_back:int, period:int):
+  def create_dataset(self, date_from:datetime, date_to:datetime, data_path:str, days_back:int, period:int):
     """Crea el conjunto de datos para el backtesting.
 
     Args:
@@ -34,6 +34,9 @@ class BackTester():
 
     df = pd.DataFrame()
 
+    date_from = date_from.strftime('%Y-%m-%d')
+    date_to = date_to.strftime('%Y-%m-%d')
+
     for ticker in self.tickers:
       try:
         print(f'Intentando levantar el dataset {ticker}')
@@ -42,7 +45,7 @@ class BackTester():
       except FileNotFoundError:
         print(f'No se encontro el Dataset {ticker}, llamando a yfinance')
 
-        self.stocks[ticker] = yf.Ticker(ticker).history(period=period).reset_index()
+        self.stocks[ticker] = yf.Ticker(ticker).history(start=date_from, end=date_to).reset_index()
         self.stocks[ticker]['Date'] = self.stocks[ticker]['Date'].dt.date
         self.stocks[ticker].to_csv(f'./data/{ticker}.csv', index=False)
 
@@ -78,7 +81,18 @@ class BackTester():
     df.to_csv(os.path.join(data_path, 'dataset.csv'), index=False)
 
 
-  def start(self, data_path:str, train_window:int, train_period:int, mode, limit_date_train, results_path):
+  def start(
+      self, 
+      start_date:datetime, 
+      data_path:str, 
+      train_window:int, 
+      train_period:int, 
+      mode, 
+      limit_date_train, 
+      results_path,
+      period_forward_target:int
+
+    ):
     """Inicia el proceso de backtesting.
 
     Args:
@@ -97,11 +111,20 @@ class BackTester():
 
     print('='*16, 'Iniciando backtesting', '='*16)
 
-    start_date = dates[0] + train_window if mode=='train' else limit_date_train
-    dates = dates[dates > start_date]
+    # start_date = dates[0] + tain_window if mode=='train' else limit_date_train
+    start_date = start_date.strftime('%Y-%m-%d') if mode=='train' else limit_date_train
+    end_date = limit_date_train if mode=='train' else None
+
+    if end_date:
+      dates = dates[(dates > start_date) & (dates < end_date)]
+    else:
+      dates = dates[dates > start_date]
 
     for date in dates:
       actual_date = date
+
+      date_to = actual_date - timedelta(days=period_forward_target + 1)
+      
       date_from = date - train_window
       
       today_market_data = df[df.Date == actual_date].copy()
@@ -114,7 +137,7 @@ class BackTester():
       # si nunca entreno o si ya pasaron los dias suficientes entrena
       if self.ml_agent is not None:
         if days_from_train is None or days_from_train >= train_period:
-          market_data_window = df[(df.Date >= date_from) & (df.Date < actual_date)]
+          market_data_window = df[(df.Date >= date_from) & (df.Date < date_to)]
 
           print(f'Se entrenaran con {market_data_window.shape[0]} registros')
           print(f'Value counts de ticker: {market_data_window.ticker.value_counts()}')
@@ -133,7 +156,7 @@ class BackTester():
         else:
           days_from_train += 1
 
-        pred = self.ml_agent.predict_proba(today_market_data.drop(columns=['target', 'Date', 'ticker']))
+        pred = self.ml_agent.predict_proba(today_market_data.drop(columns=['target', 'Date', 'ticker', 'pred']))
         print(f'Prediccion: {pred}')
         today_market_data.loc[:, 'pred'] = pred
       
@@ -160,6 +183,12 @@ class BackTester():
       stock_predictions.to_csv(os.path.join(path, 'stock_predictions.csv'), index=False)
       stock_true_values.to_csv(os.path.join(path, 'stock_true_values.csv'), index=False)
       train_results_df.to_csv(os.path.join(path, 'train_results.csv'), index=False)
+      best_params = self.ml_agent.best_params
+      
+      with open(os.path.join(path, 'params.txt'), 'w') as file:
+        for key, value in best_params.items():
+            file.write(f'{key}: {value}\n')
+
 
     orders, wallet = self.trading_agent.get_orders()
     orders.to_csv(os.path.join(path, 'orders.csv'), index=False)

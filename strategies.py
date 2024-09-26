@@ -27,7 +27,7 @@ def ml_strategy(
             return "wait", None, None
         # Si estás en posición y han pasado los días permitidos, vende
 
-        elif days_in_position == allowed_days_in_position:
+        elif days_in_position >= allowed_days_in_position:
             return "close", "sell", open_order
     # Si la predicción del mercado supera el umbral superior, compra
 
@@ -53,18 +53,25 @@ def ma_strategy(
     """
     ema_12 = actual_market_data["ema_12"]
     ema_200 = actual_market_data["ema_200"]
+
+    ema_12_yesterday = actual_market_data["ema_12_yesterday"]
+    ema_200_yesterday = actual_market_data["ema_200_yesterday"]
+ 
     pred = actual_market_data["pred"]
 
     open_order = find_open_order(orders)
 
-    model_with_indicator_buy_condition = np.isfinite(pred) and pred >= threshold_up and ema_12 > ema_200
-    only_indicator_buy_condition = np.isnan(pred) and ema_12 > ema_200
+    positive_crossover = ema_12 > ema_200 
+    negative_crossover = ema_12 < ema_200
+
+    model_with_indicator_buy_condition = np.isfinite(pred) and pred >= threshold_up and positive_crossover
+    only_indicator_buy_condition = np.isnan(pred) and positive_crossover
 
     if open_order:
         days_in_position = (today - open_order.open_date).days
 
         # Si estás en posición y han pasado los días permitidos, vende
-        if ema_12 < ema_200 or days_in_position == allowed_days_in_position:
+        if negative_crossover or days_in_position >= allowed_days_in_position:
             return "close", "sell", open_order
         # Si estás en posición pero no han pasado los días permitidos, espera
 
@@ -108,7 +115,7 @@ def bband_strategy(
     if open_order:
         days_in_position = (today - open_order.open_date).days
         # Si estás en posición y han pasado los días permitidos, vende
-        if close_price > avg_bband or days_in_position == allowed_days_in_position:
+        if close_price > upper_bband or days_in_position >= allowed_days_in_position:
             return "close", "sell", open_order
         # Si estás en posición pero no han pasado los días permitidos, espera
 
@@ -147,7 +154,7 @@ def macd_strategy(
     if open_order:
         days_in_position = (today - open_order.open_date).days
         # Si estás en posición y han pasado los días permitidos, vende
-        if macd < macd_signal or days_in_position == allowed_days_in_position:
+        if macd < macd_signal or days_in_position >= allowed_days_in_position:
             return "close", "sell", open_order
         # Si estás en posición pero no han pasado los días permitidos, espera
 

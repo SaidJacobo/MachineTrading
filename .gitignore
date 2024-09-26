@@ -20,6 +20,8 @@ env/
 # Archivos de compilación
 *.pyc
 
+*.txt
+
 # Carpeta de resultados
 results/
 

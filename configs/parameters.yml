@@ -1,22 +1,21 @@
 models: [
   null, 
   'random_forest', 
-  'neural_network', 
   'logistic_regression', 
   'gradient_boosting'
   ]
 
 train_window: [
-    38, # un mes
     76, # dos meses
     114, # tres meses
     228, # seis meses
     461, # un anio
-    689 # un anio y medio
+    689, # un anio y medio
+    922, # dos anios
+
   ] # tamanio de la ventana de entrenamiento
 
 train_period: [
-  1, 
   7, 
   14, 
   30

@@ -46,6 +46,9 @@ class TradingAgent():
     df['ema_200'] = talib.EMA(df['Close'], timeperiod=200)
     df['rsi'] = talib.RSI(df['Close'])
 
+    df['ema_12_yesterday'] = df.ema_12.shift(1)
+    df['ema_200_yesterday'] = df.ema_200.shift(1)
+
     upper_band, middle_band, lower_band = talib.BBANDS(df['Close'], timeperiod=5)
     df['upper_bband'] = upper_band
     df['middle_bband'] = middle_band
